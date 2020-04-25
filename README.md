@@ -8,7 +8,7 @@ Final project for UCLA Stats 141: Statistical Consulting. The objective is to cr
 - Valerie Chen
 - Adrika Chakraborty
 - Shirley Mach
-- Jungsoo Park
+- Josh Park
 - Julia Sung
 - Cydney Vicentina
 - Anika Vij
