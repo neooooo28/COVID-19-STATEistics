@@ -1,4 +1,8 @@
 
+This dataset consists of hospital location across the United States
+
+###
+
 The health and fiscal vulnerability of rural recreation counties
 Article: https://headwaterseconomics.org/tax-policy/fiscal-vulnerability-recreation-counties/
 
