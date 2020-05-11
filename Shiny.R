@@ -1,7 +1,7 @@
 library(shiny)
 library(dplyr)
 
-new_confirm <- read.csv("~/Dropbox/School/UCLA/stat 141sl/Final Project/shiny/data/r_0_confirmed.csv")
+new_confirm <- read.csv("directory for the confirmed cases that I uploaded on the Github:)")
 new_confirm <- new_confirm[,-1]
 new_confirm$date <- as.Date(new_confirm$date, "%Y-%m-%d")
 
