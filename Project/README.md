@@ -1,8 +1,7 @@
 # R Shiny App
 
 This app is will serve as a 'all-in-one' dashboard and information dissemination on COVID-19 data at the state level.
-The data includes: 
-- 
+This project is the culmination of a 10-week research for STATS 141, a Statistical Consulting class taught at the University of California, Los Angeles (UCLA). 
 
 ## Table of Contents
 
