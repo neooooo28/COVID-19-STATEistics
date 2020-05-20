@@ -8,7 +8,6 @@ This project is the culmination of a 10-week research for STATS 141, a Statistic
 ### 1. Start Here
 - Motivation for the Project
 - Research Question
-- 
 
 ### 2. US Summary Statistics
 - Total Number of Cases (+ cases per 100k)
