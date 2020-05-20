@@ -2,7 +2,6 @@
 title: "UCLA COVID-19 Project"
 output: 
   flexdashboard::flex_dashboard:
-    storyboard: true
     # vertical_layout: scroll
     theme: bootstrap 
     social: menu
@@ -11,7 +10,7 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warniing=FALSE, message=FALSE,
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE,
                       collapse = TRUE, comment = "#>")
 ```
 
@@ -51,7 +50,7 @@ library(shiny)
 library(flexdashboard)
 ```
 
-```{r}
+```{r global, include=FALSE}
 ## Load Datasets
 # - limit running the download links in a day to avoid overloading requests and getting a time out
 
@@ -81,29 +80,35 @@ link_ct <- paste0("https://raw.githubusercontent.com/COVID19Tracking/covid-track
 dest_ct <- paste0(getwd(),"/00_data")
 filename_ct <- "CT_states_daily_4pm_et.csv"
 download.file(link_ct, file.path(dest_ct, filename_ct))
-df_ct <- read_csv(file.path("00_data", filename_ct))
 
+
+#### 
 
 ## 2. Google Community Mobility Report (gmcr)
 link_gmcr <- "https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv?cachebust=57b4ac4fc40528e2"
 dest_gmcr <- paste0(getwd(),"/00_data")
-# filename_gmcr <- "Global_Mobility_Report.csv" # this is the default name from Google
+filename_gmcr <- "Global_Mobility_Report.csv" # this is the default name from Google
 
-### ONY RUN ONCE -- avoid requesting downloads everytime you run this shiny app
-download.file(link_gmcr, dest_gmcr) # -- 
-### COMMENT AFTER
+## 2.1 Run this if it's the first time you have the data
+# Avoid requesting downloads everytime you run this shiny app
+if(!file.exists(file.path(dest_gmcr, filename_gmcr))) {
+  download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
+} 
 
-df_gmcr <- fread("00_data/Global_Mobility_Report.csv")
+## 2.2 Run this to update the dataset
+## -- comment out if you're working on other aspects
+# download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
 
-```
+##  3. Load downloaded Data
+df_ct <- read_csv(file.path("00_data", filename_ct))
+df_gmcr <- data.table::fread("00_data/Global_Mobility_Report.csv")
 
+####################################################################################
 
-
-```{r}
 ## Data Cleaning
 
 ## 1. COVID Tracking
-df_ct_clean <- df_ct %>% 
+df_ct_clean <- read_csv(file.path("00_data", "CT_states_daily_4pm_et.csv")) %>% 
   filter(state %in% state.abb) %>% 
   mutate(date = ymd(date)) %>% 
   arrange(state, date) %>% 
@@ -138,9 +143,8 @@ df_ct_clean <- df_ct %>%
 
 
 ## 2. Google Community
-
-# only include US states
 df_gmcr <- fread("00_data/Global_Mobility_Report.csv") %>% 
+  # only include US states
   filter(country_region == "United States") %>% 
   filter(sub_region_1 %in% state.name) %>% 
   filter(sub_region_2 == "") %>% 
@@ -160,22 +164,20 @@ df_gmcr <- fread("00_data/Global_Mobility_Report.csv") %>%
   mutate(ave_7d = zoo::rollmean(x=index, k=7, fill=NA, align='right')) %>% 
   ungroup()
 
-```
+########################################
 
-```{r}
 ## Get last update date
 
 # When was ct data last updated?
-start_date_ct <- df_ct %>% pull(date) %>% min
-end_date_ct <- df_ct %>% pull(date) %>% max
+start_date_ct <- df_ct_clean %>% pull(date) %>% min
+end_date_ct <- df_ct_clean %>% pull(date) %>% max
 
 # When was Google Mobility data last updated?
 start_date_gmcr <- df_gmcr %>% pull(date) %>% min
 end_date_gmcr <- df_gmcr %>% pull(date) %>% max
 ```
 
-
-Background
+Introduction
 ======================================================================
 
 #### **WHAT HAPPENED?**
@@ -200,7 +202,7 @@ total_confirmed <- "1,458,787"
 total_deaths <- "83,015"
 ```
 
-Currentlyin the United States, of the **`r tested`** tested individuals, there are **`r total_confirmed`** current cases and **`r total_deaths`** deaths.
+Currently in the United States, of the **`r tested`** tested individuals, there are **`r total_confirmed`** current cases and **`r total_deaths`** deaths as of May 17, 2020.
 
 ***
 
@@ -213,123 +215,410 @@ Currentlyin the United States, of the **`r tested`** tested individuals, there a
 
 ***
 
-US States
+US Dashboard {data-orientation=rows}
 ======================================================================
 
-Input Sidebar {.sidebar}
-----------------------------------------------------------------------
-
-### Sidebar
-
-You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  
-
 ```{r}
-inputPanel(
-  selectInput(inputId="state", label="Select a State:",
-              choices = state.name, selected = "California"),
+## Summary stats for the US - point data
+US_summary_stats <- df_ct_clean %>% 
+  group_by(state) %>% 
+  filter(date == max(date)) %>% 
+  ungroup() %>% 
+  summarise(
+    total_tests = sum(total_tests),
+    total_cases = sum(positive),
+    total_deaths = sum(deaths),
+    
+    ave_5d_tests = sum(ave_5d_tests),
+    ave_5d_cases = sum(ave_5d_cases),
+    ave_5d_deaths = sum(ave_5d_deaths)
+  ) %>% 
+  mutate(death_rate = round((100*total_deaths / total_cases),2))
+
+## Summary stats for the US - interval data 
+US_summary_time_series <- df_ct_clean %>%
+  group_by(date) %>% 
+  summarise(
+    daily_tests = sum(daily_tests),
+    ave_5d_tests = sum(ave_5d_tests),
+    
+    daily_cases = sum(daily_cases),
+    ave_5d_cases = sum(ave_5d_cases),
+    
+    daily_deaths = sum(daily_deaths),
+    ave_5d_deaths = sum(ave_5d_deaths)
+  ) %>% 
+  ungroup()
+
+```
+
+
+Row 1
+--- 
+
+### Total Tests
+```{r}
+valueBox(format(US_summary_stats$total_tests, big.mark=","), 
+         icon="fa-exclamation")
+```
+
+### Total Confirmed Cases
+```{r}
+valueBox(format(US_summary_stats$total_cases, big.mark=","), 
+         icon="fa-thermometer", color="warning")
+```
+
+### Total Deaths
+```{r}
+valueBox(format(US_summary_stats$total_deaths, big.mark=","), 
+         icon="fa-frown", color="danger")
+```
+
+Row 2
+---
+
+### Average Daily Tests
+```{r}
+valueBox(format(US_summary_stats$ave_5d_tests, big.mark=","), 
+         icon="fa-exclamation")
+```
+
+### Average Daily Confirmed Cases
+```{r} 
+valueBox(format(US_summary_stats$ave_5d_cases, big.mark=","), 
+         icon="fa-thermometer", color="warning")
+```
+
+### Average Daily Deaths
+```{r}
+valueBox(format(US_summary_stats$ave_5d_deaths, big.mark=","), 
+         icon="fa-frown", color="danger")
+```
+
+Row 3 {data-height=150}
+---
+
+### Effective Reproduction Number, $R_t$
+```{r}
+valueBox("0.93", icon="fa-signal", color="orange")
+```
+
+### Fatility Rate
+```{r}
+valueBox(paste0(US_summary_stats$death_rate,"%"), 
+         icon="fa-bed", color="#FF0000")
+```
+
+Row 4 
+---
+
+### **DAILY TESTS (vs 5-day MA)**
+```{r}
+## 1. Daily Tests
+plot_daily_tests <- US_summary_time_series %>% 
+  filter(daily_tests > 1) %>% 
+  ggplot(aes(x=date, y=daily_tests)) +
+  geom_bar(stat="identity", fill="dodgerblue2", alpha=0.6) +
+  geom_line(aes(y=ave_5d_tests), size=1.2) +
+  # change x-axis labels from just the month to mm/dd
+  # and date ticks every 2 weeks
+  scale_x_date(labels=date_format("%b-%d"), date_breaks="2 weeks") +
+  # change y-axis from 100,000 to 100K
+  scale_y_continuous(labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size=6),
+    axis.title = element_blank()
+  ) 
+
+ggplotly(plot_daily_tests) %>% 
+  config(displayModeBar=FALSE) # %>% 
+  # layout(title = list(
+  #   text = paste0("Number of Tests per Day", "<br>",
+  #                 "<sup>","Daily vs 5-day Moving Average",
+  #                 "</sup>")))
+```
+
+### **DAILY CONFIRMED CASES (vs 5-day MA)**
+```{r}
+## 2. Daily Cases
+plot_daily_cases <- US_summary_time_series %>% 
+  filter(daily_cases > 1) %>% 
+  ggplot(aes(x=date, y=daily_cases)) +
+  geom_bar(stat="identity", fill="orange2", alpha=0.6) +
+  geom_line(data = US_summary_time_series %>% filter(daily_cases > 1),
+            mapping=aes(x = date, y=ave_5d_cases), size=1.2) +
   
-  dateRangeInput("daterange1", "Date range:",
-                 start = "2020-02-01",
-                 # end = max(as_of_date_jhu)
-                 end   = "2020-05-15")
-)
+  # change x-axis labels from just the month to mm/dd
+  # and date ticks every 2 weeks
+  scale_x_date(labels=date_format("%b-%d"), date_breaks="2 weeks") +
+  # change y-axis from 100,000 to 100K
+  scale_y_continuous(labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size=6),
+    axis.title = element_blank()
+  )
+
+ggplotly(plot_daily_cases) %>% 
+  config(displayModeBar=FALSE) # %>% 
+  # layout(title = list(
+  #   text = paste0("Number of Confirmed Cases per Day", "<br>",
+  #                 "<sup>","Daily vs 5-day Moving Average",
+  #                 "</sup>")))
 ```
 
-
-Columns {.tabset}
-----------------------------------------------------------------------
-
-### Daily Confirmed Cases
-
+### **DAILY DEATHS (vs 5-day MA)**
 ```{r}
+## 3. Daily Deaths
+plot_daily_deaths <- US_summary_time_series %>% 
+  filter(daily_deaths > 1) %>% 
+  ggplot(aes(x=date, y=daily_deaths)) +
+  geom_bar(stat="identity", fill="red2", alpha=0.6) +
+  geom_line(data = US_summary_time_series %>% filter(daily_deaths > 1),
+            mapping=aes(x = date, y=ave_5d_deaths), size=1.2) +
+  
+  # change x-axis labels from just the month to mm/dd
+  # and date ticks every 2 weeks
+  scale_x_date(labels=date_format("%b-%d"), date_breaks="2 weeks") +
+  # change y-axis from 100,000 to 100K
+  scale_y_continuous(labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size=6),
+    axis.title = element_blank()
+  )
 
+ggplotly(plot_daily_deaths) %>% 
+  config(displayModeBar=FALSE) # %>% 
+  # layout(title = list(
+  #   text = paste0("Number of Deaths per Day", "<br>",
+  #                 "<sup>","Daily vs 5-day Moving Average",
+  #                 "</sup>")))
 ```
 
-### Daily Deaths
 
-```{r}
-
-```
-
-***
-
-Mobility
+Mobility {data-orientation=rows}
 ======================================================================
 
-### **GOOGLE MOBILITY DATA** - How Are Americans Moving? 
+Inputs {.sidebar}
+---------------------------------------------------------------------
 
-```{r gmcr, echo=FALSE}
-## SHINY APP 
-ui_gmcr <- fillPage(
-  # UI Inputs
-  inputPanel(
-    # Input: US States
-    selectInput(inputId="state_gmcr", label="Select a State:",
-                choices = datasets::state.name, selected = "California"),
-    # Input: Date range (2 - start and end)
-    dateRangeInput(inputId="daterange_gmcr", label="Date:",
-                   start = start_date_gmcr, end = end_date_gmcr,
-                   min = start_date_gmcr, max = end_date_gmcr)
-  ),
-  # UI Outputs
-  plotOutput(outputId="plot_gmcr")
-)
-server_gmcr <- function(input, output, session) {
-  # Filtered Data
-  chosen_state <- reactive({
-    input$state_gmcr
-  })
-  filteredData <- reactive({
-    df_gmcr %>% 
-      filter(state == input$state_gmcr) %>% 
-      filter(date >= input$daterange_gmcr[1] &
-               date <= input$daterange_gmcr[2])
-  })
-  # Plot
-  output$plot_gmcr <- renderPlot({
-    ggplot(data = filteredData(),
-           aes(x = date, group = place)) +
-      geom_hline(yintercept = 0, col="black", size=0.2) + 
-      geom_line(aes(y = index), col="gray", lty=2, alpha=0.7, size=0.6) +
-      geom_line(aes(y = ave_7d), col="dodgerblue3", size=1.3) +
-      facet_wrap(~ place) +
-      
-      ## Formatting
-      scale_x_date(labels=date_format("%m/%d"), date_breaks="2 weeks") +
-      scale_y_continuous(labels=function(x) paste0(x,"%")) +
-      theme_minimal() +
-      labs(x="Date") +
-      theme(
-        # Border
-        panel.border = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.line = element_line(colour = "gray"),
-        # Text
-        # axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(size=8),
-        axis.text.y = element_text(size=10),
-        strip.text.x = element_text(size=12, face="bold"),
-        # Labels
-        plot.title = element_text(face="bold", hjust=0.5, size=11),
-        plot.subtitle = element_text(face="italic", hjust=0.5, size=8),
-        plot.caption = element_text(face="italic", size=7, hjust=0, margin=margin(t=15))
-      ) # +
+```{r}
+# Input: US States
+selectInput(inputId="state_gmcr", label="Select a State:",
+            choices = datasets::state.name, selected = "California")
+
+# Input: Date range (2 - start and end)
+dateRangeInput(inputId="daterange_gmcr", label="Date:",
+               start = start_date_gmcr, end = end_date_gmcr,
+               min = start_date_gmcr, max = end_date_gmcr)
+```
+
+*Note*: The baseline value, 0%, is the median mobility score during the 5-week period from Jan 3-Feb 6, 2020.
+
+Row 1 {data-height=40}
+---------------------------------------------------------------------
+
+#### **GOOGLE MOBILITY DATA** - How Are Americans Moving? 
+
+Output Value Box 
+---------------------------------------------------------------------
+
+```{r}
+# Create a reactive df for 
+df_vbox_gmcr <- reactive({
+  df_gmcr %>% 
+    filter(state == input$state_gmcr) %>% 
+    filter(date == input$daterange_gmcr[2]) %>% 
+    select(place, index) %>% 
+    mutate(index = if_else(index > 0, 
+                         paste0("+",as.character(index)), 
+                         as.character(index))) %>% 
+    pivot_wider(names_from = place, 
+                values_from = index)
+})
+```
+
+### Grocery & Pharmacy {.value-box}
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Grocery & Pharmacy`),"%"), 
+           # color="#4285F4", 
+           icon="fa-shopping-cart")
+})
+
+```
+
+### Parks
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Parks`),"%"), 
+           # color="#DB4437", 
+           icon="fa-sun")
+})
+```
+
+### Residential
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Residential`),"%"), 
+           # color="#F4B400", 
+           icon="fa-home")
+})
+```
+
+Value Box Split
+----
+
+### Retail & Recreation
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Retail & Recreation`),"%"), 
+           # color="#4285F4", 
+           icon="fa-store")
+})
+```
+
+### Transit Stations
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Transit Stations`),"%"), 
+           # color="#0F9D58", 
+           icon="fa-subway")
+})
+```
+
+### Workplaces
+```{r}
+renderValueBox ({
+  valueBox(paste0(df_vbox_gmcr() %>% pull(`Workplaces`),"%"),
+           # color="#DB4437", 
+           icon="fa-building")
+})
+```
+
+Output Plot
+---------------------------------------------------------------------
+
+```{r}
+# Filtered Data -- user inputs
+filteredData <- reactive({
+  df_gmcr %>% 
+    filter(state == input$state_gmcr) %>% 
+    filter(date >= input$daterange_gmcr[1] &
+             date <= input$daterange_gmcr[2])
+})
+
+renderPlot({
+  static_plot <- ggplot(data = filteredData(),
+                        aes(x = date, group = place)) +
+    geom_hline(yintercept = 0, col="black", size=0.2) + 
+    geom_line(aes(y = index), col="gray", lty=2, alpha=0.7, size=0.6) +
+    geom_line(aes(y = ave_7d), col="dodgerblue3", size=1.3) +
+    facet_wrap(~ place) +
+    
+    ## Formatting
+    scale_x_date(labels=date_format("%m/%d"), date_breaks="2 weeks") +
+    scale_y_continuous(labels=function(x) paste0(x,"%")) +
+    theme_minimal() +
+    labs(x="Date") +
+    theme(
+      # Border
+      # panel.border = element_blank(),
+      panel.grid.major = element_blank(),
+      # panel.grid.minor = element_blank(),
+      axis.line = element_line(colour = "gray"),
+      # Text
+      # axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.x = element_text(size=8),
+      axis.text.y = element_text(size=10),
+      strip.text.x = element_text(size=12, face="bold"),
       # Labels
-      # labs(
-      #   title = paste0("How People are Moving in ", chosen_state),
-      #   subtitle = paste0("Percent change in baseline ",
-      #                     "(7-day average) as of ",
-      #                     format(end_date_gmcr, "%m/%d/%Y")),
-      #   caption = paste0(
-      #     "Source: Google Community Mobility Reports\n",
-      #     "Note: The baseline (0%) is the median value during ",
-      #     "the 5-week period from Jan 3 to Feb 6, 2020.")
-      # )
-  })
-}
-shinyApp(ui_gmcr, server_gmcr)
+      plot.title = element_text(face="bold", hjust=0.5, size=11),
+      plot.subtitle = element_text(face="italic", hjust=0.5, size=8),
+      plot.caption = element_text(face="italic", size=7, hjust=0, margin=margin(t=15))
+    )
+  print(static_plot)
+})
+
+
+# # SHINY APP
+# ui_gmcr <- fillPage(
+#   # UI Inputs
+#   inputPanel(
+#     # Input: US States
+#     selectInput(inputId="state_gmcr", label="Select a State:",
+#                 choices = datasets::state.name, selected = "California"),
+#     # Input: Date range (2 - start and end)
+#     dateRangeInput(inputId="daterange_gmcr", label="Date:",
+#                    start = start_date_gmcr, end = end_date_gmcr,
+#                    min = start_date_gmcr, max = end_date_gmcr)
+#   ),
+#   # UI Outputs
+#   plotOutput(outputId="plot_gmcr")
+# )
+
+# server_gmcr <- function(input, output, session) {
+#   # Filtered Data
+#   chosen_state <- reactive({
+#     input$state_gmcr
+#   })
+#   filteredData <- reactive({
+#     df_gmcr %>% 
+#       filter(state == input$state_gmcr) %>% 
+#       filter(date >= input$daterange_gmcr[1] &
+#                date <= input$daterange_gmcr[2])
+#   })
+#   # Plot
+#   output$plot_gmcr <- renderPlot({
+#     static_plot <- ggplot(data = filteredData(),
+#            aes(x = date, group = place)) +
+#       geom_hline(yintercept = 0, col="black", size=0.2) + 
+#       geom_line(aes(y = index), col="gray", lty=2, alpha=0.7, size=0.6) +
+#       geom_line(aes(y = ave_7d), col="dodgerblue3", size=1.3) +
+#       facet_wrap(~ place) +
+#       
+#       ## Formatting
+#       scale_x_date(labels=date_format("%m/%d"), date_breaks="2 weeks") +
+#       scale_y_continuous(labels=function(x) paste0(x,"%")) +
+#       theme_minimal() +
+#       labs(x="Date") +
+#       theme(
+#         # Border
+#         panel.border = element_blank(),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         axis.line = element_line(colour = "gray"),
+#         # Text
+#         # axis.title.x = element_blank(),
+#         axis.title.y = element_blank(),
+#         axis.text.x = element_text(size=8),
+#         axis.text.y = element_text(size=10),
+#         strip.text.x = element_text(size=12, face="bold"),
+#         # Labels
+#         plot.title = element_text(face="bold", hjust=0.5, size=11),
+#         plot.subtitle = element_text(face="italic", hjust=0.5, size=8),
+#         plot.caption = element_text(face="italic", size=7, hjust=0, margin=margin(t=15))
+#       ) # +
+#       # Labels
+#       # labs(
+#       #   title = paste0("How People are Moving in ", chosen_state),
+#       #   subtitle = paste0("Percent change in baseline ",
+#       #                     "(7-day average) as of ",
+#       #                     format(end_date_gmcr, "%m/%d/%Y")),
+#       #   caption = paste0(
+#       #     "Source: Google Community Mobility Reports\n",
+#       #     "Note: The baseline (0%) is the median value during ",
+#       #     "the 5-week period from Jan 3 to Feb 6, 2020.")
+#       # )
+#     
+#     # Call output plot
+#     static_plot
+#   })
+# }
+# shinyApp(ui_gmcr, server_gmcr)
 ```
 
 ***
@@ -341,61 +630,113 @@ Map
 
 ```{r}
 library(leaflet)
+leaflet(width="100%") %>% 
+  addProviderTiles(providers$CartoDB.DarkMatter) 
+```
 
+
+```{r}
 # load confirmed data
 
 # Join state and coordinate data
 
-
-shinyApp(
-  ui = bootstrapPage(
-    
-    tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
-    leafletOutput(outputId="map", width="100%", height="100%"),
-    
-    absolutePanel(
-      top=10, left=10, width="300", class="panel panel-default",
-      draggable=TRUE, style = "opacity: 0.90",
-      
-      selectInput(inputId="state_map", label="Select a State:",
-                  choices = datasets::state.name, selected = "California")
-    )
-  ), # end - Shiny UI
-  
-  server = function(input, output) {
-    # Filtered Data
-    points <- reactive({
-      df_jhu %>% 
-        filter(state == input$state_map) %>% 
-        filter(date == max(date)) %>% 
-        mutate(popup = str_c(str_c(city, state, sep=", "),
-                             str_c("Population:", population, sep=" "),
-                             str_c("Confirmed Cases:", confirmed, sep=" "),
-                             str_c("Deaths:", deaths, sep=" "),
-                             sep="</br>"))
-    })
-    # Base map layer
-    output$map <- renderLeaflet({
-      leaflet(US_LatLong) %>%
-        addProviderTiles(providers$CartoDB.DarkMatter) %>%
-        fitBounds(~min(longitude), ~min(latitude), 
-                  ~max(longitude), ~max(latitude))
-    })
-    # Variable map layer
-    observe({
-      leafletProxy("map", data=points()) %>% 
-        addCircles(lng = ~longitude, lat = ~latitude, color="red", 
-                   weight = 2, fillOpacity = 0.3, stroke=FALSE, 
-                   radius = ~(0.8*confirmed),
-                   label = ~city, popup = ~popup
-        )
-    })
-    
-  } # end - Shiny Server
-) # end - Shiny App
+# shinyApp(
+#   ui = bootstrapPage(
+#     
+#     tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
+#     leafletOutput(outputId="map", width="100%", height="100%"),
+#     
+#     absolutePanel(
+#       top=10, left=10, width="300", class="panel panel-default",
+#       draggable=TRUE, style = "opacity: 0.90",
+#       
+#       selectInput(inputId="state_map", label="Select a State:",
+#                   choices = datasets::state.name, selected = "California")
+#     )
+#   ), # end - Shiny UI
+#   
+#   server = function(input, output) {
+#     # Filtered Data
+#     points <- reactive({
+#       df_jhu %>% 
+#         filter(state == input$state_map) %>% 
+#         filter(date == max(date)) %>% 
+#         mutate(popup = str_c(str_c(city, state, sep=", "),
+#                              str_c("Population:", population, sep=" "),
+#                              str_c("Confirmed Cases:", confirmed, sep=" "),
+#                              str_c("Deaths:", deaths, sep=" "),
+#                              sep="</br>"))
+#     })
+#     # Base map layer
+#     output$map <- renderLeaflet({
+#       leaflet(US_LatLong) %>%
+#         addProviderTiles(providers$CartoDB.DarkMatter) %>%
+#         fitBounds(~min(longitude), ~min(latitude), 
+#                   ~max(longitude), ~max(latitude))
+#     })
+#     # Variable map layer
+#     observe({
+#       leafletProxy("map", data=points()) %>% 
+#         addCircles(lng = ~longitude, lat = ~latitude, color="red", 
+#                    weight = 2, fillOpacity = 0.3, stroke=FALSE, 
+#                    radius = ~(0.8*confirmed),
+#                    label = ~city, popup = ~popup
+#         )
+#     })
+#     
+#   } # end - Shiny Server
+# ) # end - Shiny App
 ```
 
 ***
+
+Background
+======================================================================
+
+#### COVID Tracking Project
+
+The [COVID Tracking Project](https://www.covidtracking.com) gathers testing information from different sources for all 50 states. This was used in determining the number of total tests, number of positive and negative cases, and many more information. See the link for data schema. 
+
+```{r}
+data.frame(
+  Column = c("state", "date", "positive", "negative", "total_tests", "deaths"),
+  Description = c("U.S. State", "Date of Reporting", 
+                  "Number of confirmed COVID-19 cases, as reported by different health data sources", 
+                  "Derived from the number of tests minus the number of positive cases",
+                  "Total number of tests", "Total number of deaths")
+) %>% 
+  kable() %>% 
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+#### Google Community Mobibility Reports
+
+The [Community Mobility Reports](https://www.google.com/covid19/mobility/) show movement trends by region, across different categories of places. For this particular visualization the data was subsetted only for the United States. Note that location accuracy and the understanding of categorized places varies from region to region, so Google does not recommend using the data to compare changes between countries, or between regions with different characteristics (e.g. rural versus urban areas). 
+
+In short, the graph is an indicator if Americans are going back to their normal routines earlier this year. If the blue line is closer to the baseline, 0%, it means that people in that area are doing similar activities like they did in January. 
+
+The data shows visitors to (or time spent in) categorized places change compared to the **baseline** days. A baseline day represents a *normal* value for that day of the week, in this case it is the median value from the 5-week period from January 3rd to February 6th 2020. Each location visit is classified into 6 categories:
+
+```{r}
+data.frame(
+  Location = c("Retail & Recreation",
+               "Grocery & Pharmacy",
+               "Parks",
+               "Transit Stations",
+               "Workplaces",
+               "Residential"),
+  Description = c("mobility trends for places like restaurants, cafes, shopping centers, theme parks, museums, libraries, and movie theaters",
+                "mobility trends for places like grocery markets, food warehouses, farmers markets, specialty food shops, drug stores, and pharmacies",
+                  "mobility trends for places like national parks, public beaches, marinas, dog parks, plazas, and public gardens",
+                  "mobility trends for places like public transport hubs such as subway, bus, and train stations",
+                  "mobility trends for places of work",
+                  "mobility trends for places of residence")
+) %>% 
+  kable() %>% 
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
 
 About
 ======================================================================
@@ -435,32 +776,8 @@ Research:
 
 - Last Name, First Name. *Title: Lorem Ipsum*. Lorem Ipsum Journal. Accessed 15 May 2020. 
 
-#### **BACKGROUND** 
+***
 
-The [Community Mobility Reports](https://www.google.com/covid19/mobility/) show movement trends by region, across different categories of places. For this particular visualization the data was subsetted only for the United States. Note that location accuracy and the understanding of categorized places varies from region to region, so Google does not recommend using the data to compare changes between countries, or between regions with different characteristics (e.g. rural versus urban areas). 
-
-In short, the graph is an indicator if Americans are going back to their normal routines earlier this year. If the blue line is closer to the baseline, 0%, it means that people in that area are doing similar activities like they did in January. 
-
-The data shows visitors to (or time spent in) categorized places change compared to the **baseline** days. A baseline day represents a *normal* value for that day of the week, in this case it is the median value from the 5-week period from January 3rd to February 6th 2020. Each location visit is classified into 6 categories:
-
-```{r}
-data.frame(
-  Location = c("Retail & Recreation",
-               "Grocery & Pharmacy",
-               "Parks",
-               "Transit Stations",
-               "Workplaces",
-               "Residential"),
-  Description = c("mobility trends for places like restaurants, cafes, shopping centers, theme parks, museums, libraries, and movie theaters",
-                "mobility trends for places like grocery markets, food warehouses, farmers markets, specialty food shops, drug stores, and pharmacies",
-                  "mobility trends for places like national parks, public beaches, marinas, dog parks, plazas, and public gardens",
-                  "mobility trends for places like public transport hubs such as subway, bus, and train stations",
-                  "mobility trends for places of work",
-                  "mobility trends for places of residence")
-) %>% 
-  kable() %>% 
-  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
-```
 
 
 
