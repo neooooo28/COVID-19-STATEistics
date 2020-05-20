@@ -32,14 +32,20 @@ This project is the culmination of a 10-week research for STATS 141, a Statistic
 
 # Sample Dashboard Photos
 
+### Introduction
 ![Page 1](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page1_Introduction.png)
 
+### US Dashboard
 ![Page 2](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page2_US-Dashboard.png)
 
+### Mobility
 ![Page 3](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page3_Mobility.png)
 
+### Map
 ![Page 4](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page4_Map.png)
 
+### Background
 ![Page 5](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page5_Background.png)
 
+### About
 ![Page 6](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page6_About.png)
