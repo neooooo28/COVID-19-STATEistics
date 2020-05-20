@@ -27,3 +27,19 @@ This project is the culmination of a 10-week research for STATS 141, a Statistic
 ### 5. About
 - Team
 - Sources/Bibliography
+
+*** 
+
+# Sample Dashboard Photos
+
+![Page 1](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page1_Introduction.png)
+
+![Page 2](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page2_US-Dashboard.png)
+
+![Page 3](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page3_Mobility.png)
+
+![Page 4](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page4_Map.png)
+
+![Page 5](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page5_Background.png)
+
+![Page 6](https://github.com/neooooo28/STATS141_Grp4/blob/master/Project/sample_dashboard_photos/Page6_About.png)
