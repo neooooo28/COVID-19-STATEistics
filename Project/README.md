@@ -1,3 +1,8 @@
+### Update (5/20/2020) 
+### Knit the app using Cmd+Shift+k (Mac) or Ctrl+Shift+k (Windows)
+
+***
+
 # COVID-19 US Dashboard
 
 This R Shiny app is will serve as a 'all-in-one' dashboard and information dissemination on COVID-19 data at the state level.
