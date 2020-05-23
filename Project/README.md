@@ -22,15 +22,15 @@ This project is the culmination of a 10-week research for STATS 141, a Statistic
 ### 3. States
 - Daily Data (positive tests (confirmed) per day, total tests per day, deaths per day)
 - Mobility Data from Google
-- Policy Data (timeline of different News Sources)
+- Policy Data (timeline from different news sources)
 
 ### 4. Background
 - Data Sources
-- Data Dictionary or Schema
+- Data Dictionary and Schema
 
 ### 5. About
 - Team
-- Sources/Bibliography
+- Bibliography
 
 *** 
 
