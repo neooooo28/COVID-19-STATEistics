@@ -1,4 +1,4 @@
-# STATS141_Grp4
+# STATS141 Group 4
 Final project for UCLA Stats 141: Statistical Consulting. The objective is to create a high-level analysis related to the current COVID-19 pandemic. 
 
 
