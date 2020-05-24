@@ -22,7 +22,7 @@ This folder includes:
 
 ## Sample Plot -- Subject to Change
 
-![Insert Photo]()
+![](https://github.com/neooooo28/STATS141_Grp4/blob/master/Policy_US_States_and_Dates/plot_policy_per_state.png)
 
 ## Sources
 
