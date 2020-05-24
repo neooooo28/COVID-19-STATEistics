@@ -1,0 +1,154 @@
+---
+title: "US COVID-19 Lockdown Policies by State"
+author: ""
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE,
+                      comment = "#>", collapse = TRUE)
+```
+
+```{r}
+## Load libraries
+
+# - Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr) 
+library(lubridate)
+library(data.table)
+
+# - Tables 
+library(readr)
+library(tibble)
+library(kableExtra) # {r results = 'asis'}
+
+# - Plots
+library(ggplot2)
+library(ggrepel)
+library(scales)
+library(colorspace)
+library(plotly)
+
+# - Math
+library(deSolve)
+
+# - URL 
+library(RCurl)
+```
+
+
+# Policy per State
+
+Create a timeline of policy enactments for all US States
+
+- Full Lockdown
+- Partial Lockdown
+- Reopened
+
+
+```{r}
+# Read data -- Policy of state 
+policy_df <- readr::read_csv("states_and_dates.csv")
+
+# Assess data
+policy_df %>% glimpse
+
+# Add D.C. to the list of states of interest
+state.name2 <- c(state.name[1:8], "D.C.", state.name[9:50])
+state.abb2 <- c(state.abb[1:8], "D.C.", state.abb[9:50])
+
+# Clean data
+policy_df_clean <- policy_df %>% 
+  mutate(
+    # state abbreviation, used later for plotting
+    STATE_ABB = state.abb2,
+
+    # Add party of interest and make it a factor
+    PARTY = if_else(COLOR == "R", "Republican", "Democrat"), 
+    PARTY = factor(PARTY, levels=c("Republican", "Democrat")),
+    
+    # Change dates to date-time object
+    HOME = mdy(HOME),
+    PARTIAL = mdy(PARTIAL), 
+    REOPEN = mdy(REOPEN),
+    
+    # Change logical data to readable words
+    COLOR = if_else(COLOR == "R", "Red", "Blue"),
+    EXTENDED = if_else(EXTENDED == "N", "No", "Yes"),
+    `SHELTER-IN-PLACE` = if_else(`SHELTER-IN-PLACE`=="Y", "Yes", "Never Sheltered")
+  ) %>% 
+  
+  # Rearrange columns
+  select(STATE, STATE_ABB, PARTY, HOME, PARTIAL, REOPEN, everything())
+  
+# Check clean data
+policy_df_clean %>% head
+
+# Save to folder
+write.csv(policy_df_clean, "states_and_dates_clean.csv", row.names=FALSE)
+
+```
+
+```{r}
+## Plot Timeline
+policy_df_clean <- read_csv("states_and_dates_clean.csv")
+
+plot <- policy_df_clean %>%
+  # change names for readability in plot
+  rename(`Full Lockdown`=HOME, `Partial Restrictions`=PARTIAL, `Reopen`=REOPEN) %>%
+  pivot_longer(-c(STATE, STATE_ABB, PARTY, COLOR, EXTENDED, `SHELTER-IN-PLACE`), 
+               names_to="POLICY", values_to="DATE") %>% 
+  arrange(POLICY, DATE) %>% 
+  
+  ## Start Plot
+  ggplot(aes(x=DATE, y=STATE)) +
+  geom_segment(aes(x=DATE, y=STATE, 
+                   xend=lubridate::today(), yend=STATE, 
+                   col=POLICY),
+               size = 1.5) +
+  # geom_tile(aes(fill=POLICY)) + 
+  geom_point(aes(col=POLICY)) +
+  geom_vline(aes(xintercept=today()), lty=1, col="black", size=0.2, alpha=0.9) +
+  geom_text(data = data.frame(DATE = today()), 
+            mapping=aes(x=DATE, y=10, label="Today"), 
+            vjust=2, hjust=0, size=2) +
+  facet_wrap(~ PARTY, ncol=1, scales="free_y") +
+  
+  ## Aesthetic Formatting
+  scale_x_date(labels=date_format("%b-%d"), date_breaks="1 week") +
+  scale_fill_manual(values=c("green3", "orange", "red3")) +
+  scale_color_manual(values=c("green3", "orange", "red3")) +
+  theme_minimal() +
+  theme(
+    # Border
+    panel.grid = element_blank(),
+
+    # Text
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(size=6),
+    axis.text.y = element_text(size=5.5, face="bold"),
+    axis.ticks = element_line(size=0.5),
+    axis.ticks.length = unit(0.1, "cm"),
+    strip.text.x = element_text(face="bold"),
+    legend.title = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(size=12, face="bold", hjust=0.5),
+    plot.caption = element_text(size=6, face="italic", hjust=0, margin=margin(t=15))
+  ) +
+  labs(
+    title = "Too Soon to Reopen?",
+    caption="Source: NY Times, NBC, ABC, Business Insider"
+  )
+
+# Call the plot
+plot
+
+# Make a static plot, interactive ... explore more options here! :) 
+ggplotly(plot)
+```
+
+

@@ -1,0 +1,52 @@
+STATE,COLOR,HOME,PARTIAL,REOPEN,EXTENDED,SHELTER-IN-PLACE
+Alabama,R,4/4/20,4/30/20,,N,Y
+Alaska,R,3/28/20,4/24/20,,N,Y
+Arizona,R,3/31/20,5/4/20,,N,Y
+Arkansas,R,NA,,5/1/20,N,N
+California,B,3/19/20,5/8/20,,Y,Y
+Colorado,B,3/26/20,4/27/20,,N,Y
+Connecticut,B,3/23/20,5/20/20,,Y,Y
+Delaware,B,3/24/20,5/8/20,,Y,Y
+D.C.,B,4/1/20,6/8/20,,N,Y
+Florida,R,4/3/20,5/4/20,,N,Y
+Georgia,R,4/3/20,,4/30/20,N,Y
+Hawaii,B,3/25/20,4/30/20,,N,Y
+Idaho,R,3/25/20,5/1/20,,N,Y
+Illinois,B,3/21/20,5/1/20,,N,Y
+Indiana,R,3/24/20,5/4/20,,N,Y
+Iowa,R,NA,,5/1/20,N,N
+Kansas,R,3/30/20,5/4/20,,N,Y
+Kentucky,R,3/26/20,5/11/20,,Y,Y
+Louisiana,R,3/23/20,5/1/20,,Y,Y
+Maine,B,4/2/20,5/1/20,,N,Y
+Maryland,B,3/30/20,5/7/20,,Y,Y
+Massachusetts,B,3/24/20,,,Y,Y
+Michigan,R,3/24/20,5/7/20,,Y,Y
+Minnesota,B,3/25/20,5/4/20,,Y,Y
+Mississippi,R,4/3/20,4/27/20,,N,Y
+Missouri,R,4/6/20,,5/4/20,N,Y
+Montana,R,3/28/20,,4/27/20,N,Y
+Nebraska,R,NA,,5/4/20,N,N
+Nevada,B,4/1/20,5/15/20,,N,Y
+New Hampshire,B,3/27/20,5/11/20,,N,Y
+New Jersey,B,3/21/20,5/2/20,,Y,Y
+New Mexico,B,3/24/20,5/1/20,,Y,Y
+New York,B,3/22/20,5/15/20,,Y,Y
+North Carolina,R,3/30/20,5/8/20,,N,Y
+North Dakota,R,NA,,5/1/20,N,N
+Ohio,R,3/23/20,5/1/20,,N,Y
+Oklahoma,R,NA,,4/24/20,N,N
+Oregon,B,3/23/20,5/15/20,,N,Y
+Pennsylvania,R,4/1/20,5/1/20,,N,Y
+Rhode Island,B,3/28/20,5/9/20,,N,Y
+South Carolina,R,4/7/20,,4/20/20,N,Y
+South Dakota,R,NA,,4/28/20,N,N
+Tennessee,R,3/31/20,,4/27/20,N,Y
+Texas,R,4/2/20,,5/1/20,N,Y
+Utah,R,NA,,5/1/20,N,N
+Vermont,B,3/25/20,5/15/20,,Y,Y
+Virginia,B,3/25/20,6/10/20,,Y,Y
+Washington,B,3/23/20,5/5/20,,Y,Y
+West Virginia,R,3/24/20,4/30/20,,N,Y
+Wisconsin,R,3/25/20,5/1/20,,N,Y
+Wyoming,R,NA,,5/1/20,N,N
