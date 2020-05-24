@@ -13,9 +13,9 @@ This folder includes:
 | STATE | string | Full name of U.S. State |
 | STATE_ABB | string | Two-letter state abbreviation |
 | PARTY | string | `Democrat` or `Republican` |
-| HOME | date | Start date where full lockdown was enforced |
-| PARTIAL | date | Start date where restrictions were eased |
-| REOPEN | date | Start date where states can reopen, i.e. close to normal operations |
+| HOME | date | Start date when full lockdown was enforced |
+| PARTIAL | date | Start date when restrictions were eased |
+| REOPEN | date | Start date when states can reopen, i.e. close to normal operations |
 | COLOR | string | `Red` or `Blue`. Same as `PARTY` |
 | EXTENDED | string | `Yes` or `No`. Did states extend lockdown or not |
 | SHELTER-IN-PLACE | string | `Yes` or `Never Sheltered`. Did states enforce a lockdown policy |
