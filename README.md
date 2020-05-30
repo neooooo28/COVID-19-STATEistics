@@ -14,7 +14,7 @@ Final project for UCLA Stats 141: Statistical Consulting. The objective is to cr
 - Anika Vij
 - Jericho Villareal
 
-### [Website](https://juliasungg.wixsite.com/stayathome)
+### [Wix Website](https://juliasungg.wixsite.com/stayathome)
  
 ### [Google Drive](https://drive.google.com/drive/folders/1FZWvnXiJFR9Dz_0d6Wzq85GMVJydYuDZ?fbclid=IwAR0bKBcmCUU3cXHy7CMwNUGnqMkSeXWAcxpbqbMrkNpD8igA744cdYKhBc0)
 
