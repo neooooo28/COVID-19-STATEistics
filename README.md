@@ -1,5 +1,6 @@
-# STATS141 Group 4
-Final project for UCLA Stats 141: Statistical Consulting. The objective is to create a high-level analysis related to the current COVID-19 pandemic. 
+# COVID-19 R Shiny Dashboard
+
+This will serve as the repository for our final project for UCLA Stats 141: Statistical Consulting. The objective is to create a high-level analysis related to the current COVID-19 pandemic. 
 
 
 ### Collaborators
