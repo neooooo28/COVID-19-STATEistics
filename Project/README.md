@@ -1,5 +1,4 @@
-### Update (5/20/2020) 
-### Knit the app using Cmd+Shift+k (Mac) or Ctrl+Shift+k (Windows)
+### First Iteration
 
 ***
 
