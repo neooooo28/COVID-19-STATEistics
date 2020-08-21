@@ -1,3 +1,5 @@
+### Update (8/20/2020): This folder is not being used anymore
+
 ### First Iteration (5/5/2020)
 
 
