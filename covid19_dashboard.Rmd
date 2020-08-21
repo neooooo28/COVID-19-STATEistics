@@ -1,0 +1,1182 @@
+---
+title: "COVID-19 STATEistics"
+resource_files:
+- 00_data/CT_states_daily_4pm_et.csv
+- 00_data/Global_Mobility_Report.csv
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    theme: bootstrap
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE,
+                      collapse = TRUE, comment = "#>")
+```
+
+```{r libraries, include=FALSE}
+## Load Libraries
+
+# - Data Wrangling
+# library(tidyverse)
+library(dplyr)       # core wrangling
+library(tidyr)       # pivot
+library(stringr)     # strings
+library(lubridate)   # date object conversion
+library(data.table)  # fread, fast handling of data
+
+# - Tables 
+library(readr)       # read_csv
+library(tibble)      # as_tibble()
+library(knitr)       # knit kables
+library(kableExtra)  # {r results = 'asis'}
+
+# - Plots
+library(ggplot2)     # core plotting
+library(scales)      # x,y scales
+library(colorspace)  # sequence, diverging colors
+library(ggrepel)     # labels, geom_text()
+library(plotly)      # interactive plots
+
+# - Math
+library(zoo)        # moving average, rollmean
+
+# - URL 
+library(RCurl)      # handling links
+library(downloader) # wraps `download.file` cross-platform download
+
+# - Shiny
+library(shiny)
+library(flexdashboard)
+```
+
+```{r global, include=FALSE}
+## Download Datasets
+
+## 1. The COVID Tracking Project (ct)
+link_ct <- "https://api.covidtracking.com/v1/states/daily.csv" 
+dest_ct <- paste0(getwd(),"/00_data")
+filename_ct <- "CT_states_daily_4pm_et.csv"
+# download.file(link_ct, file.path(dest_ct, filename_ct)) 
+
+## 2. Google Community Mobility Report (gmcr)
+link_gmcr <- "http://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv?cachebust=57b4ac4fc40528e2"
+dest_gmcr <- paste0(getwd(),"/00_data")
+filename_gmcr <- "Global_Mobility_Report.csv" # this is the default name from Google
+
+if(!file.exists(file.path(dest_gmcr, filename_gmcr))) {
+  download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
+}
+
+# Comment/Uncomment when updating Google Data
+# download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
+```
+
+```{r}
+## Load Datasets
+df_ct <- readr::read_csv(file.path("00_data", filename_ct))
+df_gmcr <- data.table::fread(file.path("00_data", filename_gmcr))
+df_policy <- readr::read_csv("00_data/states_and_dates_clean.csv")
+us_latlong_pop2019 <- readr::read_csv("00_data/us_latlong_pop2019.csv")
+```
+
+
+```{r}
+## Data Cleaning
+
+# COVID Tracking Project 
+state.abb2 = c(state.abb[1:8], "DC", state.abb[9:50])
+state.name2 = c(state.name[1:8], "D.C.", state.name[9:50])
+
+df_ct_clean <- df_ct %>% 
+  filter(state %in% state.abb2) %>% 
+  mutate(date = ymd(date)) %>% 
+  arrange(state, date) %>% 
+  
+  # Rename columns
+  select(date, state, positive, negative, 
+         total_tests=totalTestResults, 
+         deaths = death,
+         daily_cases = positiveIncrease,
+         daily_tests = totalTestResultsIncrease,
+         daily_deaths = deathIncrease) %>% 
+  
+  # 5 days because it's the average time between onset and confirmed
+  group_by(state) %>% 
+  mutate(ave_7d_cases = zoo::rollmean(x=daily_cases, k=7, fill=NA, align='right'),
+         ave_7d_tests = zoo::rollmean(x=daily_tests, k=7, fill=NA, align='right'),
+         ave_7d_deaths = zoo::rollmean(x=daily_deaths, k=7, fill=NA, align='right')
+  ) %>% 
+  ungroup() %>%  
+  
+  # Reorder columns such that: id | cases | tests | deaths
+  select(date, state,
+         positive, negative, daily_cases, ave_7d_cases, 
+         total_tests, daily_tests, ave_7d_tests, 
+         deaths, daily_deaths, ave_7d_deaths) %>% 
+  
+  # Convert 2-letter state abbreviation to full state names:
+  left_join(data.frame(state=state.abb2, 
+                       state2=state.name2, 
+                       stringsAsFactors=FALSE), 
+            by=c("state")) %>% 
+  select(-state) %>% 
+  select(date, state=state2, everything())
+
+# Google Mobility
+df_gmcr <- df_gmcr %>% 
+  # only include US states
+  filter(country_region == "United States") %>% 
+  filter(sub_region_1 %in% state.name) %>% 
+  filter(sub_region_2 == "") %>% 
+  select(-c(country_region_code, country_region, sub_region_2, iso_3166_2_code, census_fips_code, metro_area)) %>%
+  rename(state = sub_region_1, 
+         `Retail & Recreation` = retail_and_recreation_percent_change_from_baseline,
+         `Grocery & Pharmacy` = grocery_and_pharmacy_percent_change_from_baseline,
+         `Parks` = parks_percent_change_from_baseline,
+         `Transit Stations` = transit_stations_percent_change_from_baseline,
+         `Workplaces` = workplaces_percent_change_from_baseline,
+         `Residential` = residential_percent_change_from_baseline) %>% 
+  mutate(date = lubridate::ymd(date)) %>% 
+  as_tibble() %>% 
+  tidyr::pivot_longer(-c(state, date), names_to="place", values_to="index") %>% 
+  group_by(state, place) %>% 
+  # 7 days so we have a week-on-week analysis
+  mutate(ave_7d = zoo::rollmean(x=index, k=7, fill=NA, align='right')) %>% 
+  ungroup()
+
+# Policy Data
+names(df_policy) <- tolower(names(df_policy))
+
+## Republican States
+states_gop <- df_policy %>% 
+  filter(party == "Republican") %>% 
+  pull(state)
+
+## Democrat States
+states_dnc <- df_policy %>% 
+  filter(party == "Democrat") %>% 
+  pull(state)
+```
+
+```{r}
+# When was ct data last updated?
+start_date_ct <- df_ct_clean %>% pull(date) %>% min
+end_date_ct <- df_ct_clean %>% pull(date) %>% max
+
+# When was Google Mobility data last updated?
+start_date_gmcr <- df_gmcr %>% pull(date) %>% min
+end_date_gmcr <- df_gmcr %>% pull(date) %>% max
+```
+
+Dashboard {data-orientation=rows}
+===========
+
+Inputs {.sidebar}
+---------------------------------------------------------------------
+
+```{r}
+# Input: US States
+selectInput(inputId="state_ct", label="Select a State:",
+            choices = c("All States", 
+                        "Republican", 
+                        "Democrat", 
+                        state.name2), 
+            selected = "California")
+
+# Input: Date range (start and end)
+dateRangeInput(inputId="daterange_ct", label="Date:",
+               # Default start at March 1, 2020
+               start = "2020-03-01", end = end_date_ct,
+               min = start_date_ct, max = end_date_ct)
+
+
+```
+
+**Last Update**: `r format(end_date_ct, "%b %d, %Y")`
+
+***
+
+Source: [The COVID Tracking Project](https://covidtracking.com/) is a volunteer organization dedicated to collecting and publishing the data required to understand the COVID-19 outbreak in the United States.
+
+***
+
+```{r}
+newcasesData <- reactive({
+  if(input$state_ct == "All States") {
+    df_ct_clean %>% 
+      filter(date == input$daterange_ct[2]) %>%
+      select(State=state, `New Cases`=daily_cases) %>% 
+      arrange(-`New Cases`) %>% 
+      mutate(`New Cases` = as.character(`New Cases`))
+  }
+  else if(input$state_ct == "Republican") {
+    df_ct_clean %>% 
+      filter(date == input$daterange_ct[2]) %>%
+      filter(state %in% states_gop) %>% 
+      select(State=state, `New Cases`=daily_cases) %>% 
+      arrange(-`New Cases`) %>% 
+      mutate(`New Cases` = as.character(`New Cases`))
+  }
+  else if(input$state_ct == "Democrat") {
+    df_ct_clean %>% 
+      filter(date == input$daterange_ct[2]) %>%
+      filter(state %in% states_dnc) %>% 
+      select(State=state, `New Cases`=daily_cases) %>% 
+      arrange(-`New Cases`) %>% 
+      mutate(`New Cases` = as.character(`New Cases`))
+  }
+})
+
+renderTable({
+  newcasesData()
+})
+```
+
+```{r}
+# Reactive df for summary stats on point data
+# - used for value box 
+df_vbox_ct <- reactive({
+  ## All States
+  if(input$state_ct == "All States") {
+    df_ct_clean %>% 
+      filter(date == input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+  ## Republican 
+  else if(input$state_ct == "Republican") {
+    df_ct_clean %>% 
+      filter(state %in% states_gop) %>% 
+      filter(date == input$daterange_ct[2]) %>%  
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+
+  }
+  ## Democrat
+  else if(input$state_ct == "Democrat") {
+    df_ct_clean %>% 
+      filter(state %in% states_dnc) %>% 
+      filter(date == input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+  ## Individual States
+  else {
+    df_ct_clean %>% 
+      filter(state == input$state_ct) %>% 
+      filter(date == input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+})
+```
+
+Row 
+------------------------------------------------------
+
+### New Tests Today
+```{r}
+renderValueBox ({
+  valueBox(
+    format(df_vbox_ct()$daily_tests, big.mark=",") 
+    # icon="fa-exclamation"
+  )
+})
+```
+
+### New Cases Today
+```{r} 
+renderValueBox ({
+  valueBox(
+    format(df_vbox_ct()$daily_cases, big.mark=","),
+    #icon="fa-thermometer", 
+    color="warning"
+  )
+})
+```
+
+### New Deaths Today
+```{r}
+renderValueBox ({
+  valueBox(
+    format(df_vbox_ct()$daily_deaths, big.mark=","), 
+    #icon="fa-frown", 
+    color="danger"
+  )
+})
+```
+
+Row 3
+------------------------------------------------------
+
+### COVID+ Rate
+```{r}
+renderValueBox ({
+  valueBox(
+    paste0(100*round(df_vbox_ct()$positive/df_vbox_ct()$total_tests,4),"%"), 
+    # icon="fa-user-plus", 
+    color="#F8961E"
+  )
+})
+
+```
+
+### Fatility Rate
+```{r}
+renderValueBox ({
+  valueBox(
+    paste0(100*round(df_vbox_ct()$deaths/df_vbox_ct()$positive,4),"%"),
+    # icon="fa-bed", 
+    color="#F94144"
+  )
+})
+
+```
+
+Row 4 {data-height=1000}
+--------------------
+
+### **DAILY TESTS (vs 7-day MA)**
+```{r}
+# Reactive df for summary stats on interval time data
+# - used for plots 
+df_plot_ct <- reactive({
+  
+  ## All States
+  if(input$state_ct == "All States") {
+    df_ct_clean %>% 
+      filter(date >= input$daterange_ct[1] &
+               date <= input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+  ## Republican
+  else if(input$state_ct == "Republican") {
+    df_ct_clean %>% 
+      filter(state %in% states_gop) %>% 
+      filter(date >= input$daterange_ct[1] &
+               date <= input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+  
+  ## Democrat 
+  else if(input$state_ct == "Democrat") {
+    df_ct_clean %>% 
+      filter(state %in% states_dnc) %>% 
+      filter(date >= input$daterange_ct[1] &
+               date <= input$daterange_ct[2]) %>% 
+      group_by(date) %>% 
+      summarise(
+        total_tests=sum(total_tests), 
+        daily_tests=sum(daily_tests),
+        ave_7d_tests=sum(ave_7d_tests),
+        positive=sum(positive),
+        daily_cases=sum(daily_cases),
+        ave_7d_cases=sum(ave_7d_cases),
+        deaths=sum(deaths),
+        daily_deaths=sum(daily_deaths),
+        ave_7d_deaths=sum(ave_7d_deaths)
+      )
+  }
+  ## Individual State
+  else {
+    df_ct_clean %>% 
+      filter(state == input$state_ct) %>% 
+      filter(date >= input$daterange_ct[1] &
+               date <= input$daterange_ct[2])
+  }
+})
+
+## 1. Daily Tests
+renderPlotly ({
+  static_plot_tests <- ggplot(data=df_plot_ct(),
+                              aes(x = date)) +
+    geom_bar(aes(y=daily_tests), stat='identity', fill="dodgerblue2", alpha=0.7) +
+    geom_line(aes(y=ave_7d_tests), alpha=0.9, size=1) +
+    scale_x_date(
+      labels=date_format("%b %d"), date_breaks="3 weeks") +
+    scale_y_continuous(
+      labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+    theme_minimal() +
+    theme(
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(size=7, angle=45),
+      axis.title = element_blank()
+    )
+  #print(static_plot_tests)
+  ggplotly(static_plot_tests) %>% 
+    layout(hovermode='x unified') %>% 
+    config(displayModeBar = FALSE)
+})
+
+
+```
+
+### **DAILY CASES (vs 7-day MA)**
+```{r}
+## 2. Daily Cases
+renderPlotly ({
+  static_plot_tests <- ggplot(data=df_plot_ct(),
+                              aes(x = date)) +
+    geom_bar(aes(y=daily_cases), stat='identity', fill="orange2", alpha=0.7) +
+    geom_line(aes(y=ave_7d_cases), alpha=0.9, size=1) +
+    scale_x_date(
+      labels=date_format("%b %d"), date_breaks="3 weeks") +
+    # scale_y_continuous(labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+    theme_minimal() +
+    theme(
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(size=7, angle=45),
+      axis.title = element_blank()
+    )
+  #print(static_plot_tests)
+  ggplotly(static_plot_tests) %>% 
+    layout(hovermode='x unified') %>% 
+    config(displayModeBar = FALSE)
+})
+```
+
+### **DAILY DEATHS (vs 7-day MA)**
+```{r}
+## 3. Daily Deaths
+renderPlotly ({
+  static_plot_tests <- ggplot(data=df_plot_ct(),
+                              aes(x = date)) +
+    geom_bar(aes(y=daily_deaths), stat='identity', fill="red2", alpha=0.7) +
+    geom_line(aes(y=ave_7d_deaths), alpha=0.9, size=1) +
+    scale_x_date(
+      labels=date_format("%b %d"), date_breaks="3 weeks") +
+    # scale_y_continuous(labels=scales::unit_format(unit="K", scale=1e-3, sep="")) +
+    theme_minimal() +
+    theme(
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(size=7, angle=45),
+      axis.title = element_blank()
+    )
+  #print(static_plot_tests)
+  ggplotly(static_plot_tests) %>% 
+    layout(hovermode='x unified') %>% 
+    config(displayModeBar = FALSE)
+})
+```
+
+Column 1
+-----------
+
+```{r}
+plot_static_newcases <- df_ct_clean %>% 
+  select(date, state, daily_cases, ave_7d_cases) %>% 
+  
+  ## Trend for the last 30 days
+  filter(date >= end_date_ct-30 & date <= end_date_ct) %>% 
+  mutate(ave_7d_cases = round(ave_7d_cases,0)) %>% 
+  rename(Date = date, Ave7d= ave_7d_cases) %>% 
+  
+  ggplot(aes(x=Date, y=Ave7d)) +
+  geom_line(size=0.5, alpha=0.9, col="black") +
+  geom_area(alpha=0.1) +
+  theme_minimal() +
+  facet_wrap(~ state, scales="free_y", nrow=13) +
+  scale_x_date(date_labels="%b %d", date_breaks="3 weeks") +
+  theme(
+    panel.grid=element_blank(),
+    axis.title=element_blank(),
+    axis.text=element_blank(),
+    panel.spacing.x = unit(0.25,"lines"),
+    panel.spacing.y = unit(-0.15,"lines"),
+    # strip.text.x = element_text(size=8, vjust=-4),
+    plot.title=element_text(face="bold", hjust=0.5)
+  ) +
+  labs(title="30-Day Trend of COVID+ Cases")
+  
+# ggplotly(plot_static_newcases, 
+#          height=800, width=800) %>% 
+#   # layout(hovermode='x unified') %>% 
+#   config(displayModeBar = FALSE)
+plotly::ggplotly(plot_static_newcases,
+                 height=1100, width=1280) %>%
+  config(displayModeBar = FALSE)
+```
+
+
+Mobility {data-orientation=rows}
+======================================================================
+
+Inputs {.sidebar}
+---------------------------------------------------------------------
+
+```{r}
+# Input: US States
+selectInput(inputId="state_gmcr", label="Select a State:",
+           choices = c("All States", 
+                        "Republican", 
+                        "Democrat", 
+                        datasets::state.name),
+            selected = "California")
+
+# Input: Date range (2 - start and end)
+dateRangeInput(inputId="daterange_gmcr", label="Date:",
+               start = start_date_gmcr, end = end_date_gmcr,
+               min = start_date_gmcr, max = end_date_gmcr)
+
+
+```
+
+**Last Update**: `r format(end_date_gmcr, "%b %d, %Y")`
+
+***
+
+The [Google Mobility Reports](https://www.google.com/covid19/mobility/) show movement trends by area across different categories of places. 
+
+If the line is closer to 0% it means that people are doing similar activities like they did at the beginning of the year.
+
+**Grocery & Pharmacy**:  
+- supermarkets, food warehouses, farmers markets, specialty food shops, drug stores, pharmacies 
+
+**Parks**:  
+- national parks, beaches, marinas, dog parks, plazas, public gardens
+
+**Residential**:  
+- places of residence, houses, apartments
+
+**Retail & Recreation**:   
+- restaurants, cafes, shopping centers, theme parks, museums, libraries, movie theaters
+
+**Transit Stations**:  
+- public transport hubs, subway, bus, train
+
+**Workplaces**:  
+- office space, work districts
+
+Output Value Box 
+---------------------------------------------------------------------
+
+```{r}
+# Color Palette for 6 places (from coolors.co/palettes)
+colorz <- c("#F94144", "#F3722C", "#F9C74F", "#90BE6D", "#43AA8B", "#577590")
+
+# Create a reactive df for valuebox
+df_vbox_gmcr <- reactive({
+  ## All States
+  if(input$state_gmcr == "All States") {
+    df_gmcr %>% 
+      filter(date == input$daterange_gmcr[2]) %>% 
+      group_by(place) %>% 
+      summarise(index=median(index, na.rm=TRUE)) %>% 
+      ungroup() %>% 
+      mutate(index = if_else(index > 0, 
+                             paste0("+",as.character(index)), 
+                             as.character(index))) %>% 
+      pivot_wider(names_from = place, 
+                  values_from = index)
+    
+  }
+  ## Republican States
+  else if(input$state_gmcr == "Republican") {
+    df_gmcr %>%
+      filter(state %in% states_gop) %>% 
+      filter(date == input$daterange_gmcr[2]) %>%
+      group_by(place) %>% 
+      summarise(index=median(index, na.rm=TRUE)) %>% 
+      ungroup() %>% 
+      mutate(index = if_else(index > 0, 
+                             paste0("+",as.character(index)), 
+                             as.character(index))) %>% 
+      pivot_wider(names_from = place, 
+                  values_from = index)
+  }
+  
+  ## Democrat States
+  else if(input$state_gmcr == "Democrat") {
+    df_gmcr %>%
+      filter(state %in% states_dnc) %>% 
+      filter(date == input$daterange_gmcr[2]) %>%
+      group_by(place) %>% 
+      summarise(index=median(index, na.rm=TRUE)) %>% 
+      ungroup() %>% 
+      mutate(index = if_else(index > 0, 
+                             paste0("+",as.character(index)), 
+                             as.character(index))) %>% 
+      pivot_wider(names_from = place, 
+                  values_from = index)
+  }
+  ## Individual States
+  else {
+    df_gmcr %>% 
+      filter(state == input$state_gmcr) %>% 
+      filter(date == input$daterange_gmcr[2]) %>% 
+      select(place, index) %>% 
+      mutate(index = if_else(index > 0, 
+                             paste0("+",as.character(index)), 
+                             as.character(index))) %>% 
+      pivot_wider(names_from = place, 
+                  values_from = index)
+  }
+ 
+})
+```
+
+### Grocery & Pharmacy
+```{r}
+renderValueBox ({
+  valueBox(
+    value=paste0(df_vbox_gmcr() %>% pull(`Grocery & Pharmacy`),"%"),
+    # color="#4285F4", 
+    color=colorz[1],
+    icon="fa-shopping-cart"
+  )
+})
+```
+
+### Parks
+```{r}
+renderValueBox ({
+  valueBox(
+    paste0(df_vbox_gmcr() %>% pull(`Parks`),"%"), 
+    # color="#DB4437", 
+    color=colorz[2],
+    icon="fa-sun"
+  )
+})
+```
+
+### Residential
+```{r}
+renderValueBox ({
+  valueBox(
+    value = paste0(df_vbox_gmcr() %>% pull(`Residential`),"%"), 
+    # color = "#F4B400", 
+    color=colorz[3],
+    icon = "fa-home"
+  )
+})
+```
+
+Value Box Split
+----
+
+### Retail & Recreation
+```{r}
+renderValueBox ({
+  valueBox(
+    value=paste0(df_vbox_gmcr() %>% pull(`Retail & Recreation`),"%"),
+    # color="#4285F4", 
+    color=colorz[4],
+    icon="fa-store"
+  )
+})
+```
+
+### Transit Stations
+```{r}
+renderValueBox ({
+  valueBox(
+    value=paste0(df_vbox_gmcr() %>% pull(`Transit Stations`),"%"),
+    # color="#0F9D58", 
+    color=colorz[5],
+    icon="fa-subway"
+  )
+})
+```
+
+### Workplaces
+```{r}
+renderValueBox ({
+  valueBox(
+    value=paste0(df_vbox_gmcr() %>% pull(`Workplaces`),"%"),
+    # color="#DB4437", 
+    color=colorz[6],
+    icon="fa-building"
+  )
+})
+```
+
+Output Plot
+---------------------------------------------------------------------
+
+```{r}
+# Color Palette for 6 places (from coolors.co/palettes)
+colorz <- c("#F94144", "#F3722C", "#F9C74F", "#90BE6D", "#43AA8B", "#577590")
+
+# Filtered Data -- user inputs
+filteredData <- reactive({
+  
+  ## All States
+  if(input$state_gmcr == "All States") {
+    df_gmcr %>% 
+      filter(date >= input$daterange_gmcr[1] &
+               date <= input$daterange_gmcr[2]) %>% 
+      group_by(date, place) %>% 
+      summarise(Mean_Change=mean(index),
+                Median_Change=median(index)) %>% 
+      rename(Date=date,
+             Place=place,
+             Change=Median_Change)
+  } 
+  
+  ## Republican States
+  else if(input$state_gmcr == "Republican") {
+    df_gmcr %>% 
+      filter(state %in% states_gop) %>% 
+      filter(date >= input$daterange_gmcr[1] &
+               date <= input$daterange_gmcr[2]) %>% 
+      group_by(date, place) %>% 
+      summarise(Mean_Change=mean(index),
+                Median_Change=median(index)) %>% 
+      rename(Date=date,
+             Place=place,
+             Change=Median_Change)
+  }
+  
+  ## Democrat States
+  else if(input$state_gmcr == "Democrat") {
+    df_gmcr %>% 
+      filter(state %in% states_dnc) %>% 
+      filter(date >= input$daterange_gmcr[1] &
+               date <= input$daterange_gmcr[2]) %>% 
+      group_by(date, place) %>% 
+      summarise(Mean_Change=mean(index),
+                Median_Change=median(index)) %>% 
+      rename(Date=date,
+             Place=place,
+             Change=Median_Change)
+  }
+  ## Individual States
+  else {
+    df_gmcr %>% 
+      filter(state == input$state_gmcr) %>% 
+      filter(date >= input$daterange_gmcr[1] &
+               date <= input$daterange_gmcr[2]) %>% 
+      mutate(ave_7d = round(ave_7d,2)) %>% 
+      rename(
+        `Date`=date,
+        `Place`=place,
+        `Change`=index,
+        `7d Ave`=ave_7d
+      )
+  }
+})
+
+renderPlotly({
+  static_plot <- ggplot(data = filteredData(),
+                        aes(x = Date)) +
+    geom_hline(yintercept = 0, col="black", size=0.2) + 
+    
+    ## Actual Values 
+    geom_line(aes(y = Change, col = Place), size=0.6) +
+    
+    ## Smoothed Values 
+    # geom_smooth(aes(y=Change, col=Place), size=0.6, se=FALSE) +
+    
+    ## 7-Day Moving Average
+    # geom_line(aes(y = `7d Ave`, col = Place), col="dodgerblue3", size=0.6) +
+    
+    ## Formatting
+    scale_x_date(labels=date_format("%b %d"), date_breaks="3 weeks") +
+    scale_y_continuous(labels=function(x) paste0(x,"%")) +
+    scale_color_manual(values=colorz) +
+    theme_minimal() +
+    labs(x="Date", y="% change from baseline", 
+         col="Click on each legend<br>to toggle on/off",
+         title="Mobility Index") +
+    theme(
+      # Border
+      panel.grid.major = element_blank(),
+      axis.line = element_line(colour = "gray"),
+      # Text
+      axis.text.x = element_text(size=8),
+      axis.text.y = element_text(size=10),
+      # Labels
+      legend.title = element_text(face="italic", size=7, hjust=0),
+      plot.title = element_text(face="bold", hjust=0.5, size=11),
+      plot.subtitle = element_text(face="italic", hjust=0.5, size=8),
+      plot.caption = element_text(face="italic", size=7, hjust=0, margin=margin(t=15))
+    )
+  ggplotly(static_plot) %>% 
+    layout(hovermode='x') %>% 
+    config(displayModeBar = FALSE)
+  # print(static_plot)
+})
+
+```
+
+Map
+=================
+
+```{r map data, include=FALSE}
+# Shapefile data from `tigris` package
+states_shape <- tigris::states(cb=TRUE)
+
+## Create a map dataframe
+df_map <- df_ct_clean %>% 
+  select(
+    date, 
+    state_name=state, 
+    daily_tests=ave_7d_tests, 
+    daily_cases=ave_7d_cases, 
+    daily_deaths=ave_7d_deaths, 
+    total_deaths=deaths
+  ) %>% 
+  
+  # data cleaning: if NA, then 0; if negative, then positive
+  mutate(
+    daily_tests = if_else(is.na(daily_tests), 0, daily_tests),
+    daily_tests = if_else(daily_tests < 0, -1*daily_tests, daily_tests), 
+    daily_cases = if_else(is.na(daily_cases), 0, daily_cases),
+    daily_cases = if_else(daily_cases < 0, -1*daily_cases, daily_cases),
+    total_deaths = if_else(is.na(total_deaths), 0, total_deaths), 
+    daily_deaths = if_else(is.na(daily_deaths), 0, daily_deaths),
+    daily_deaths = if_else(daily_deaths < 0, -1*daily_deaths, daily_deaths)
+  ) %>% 
+  
+  # Add population per state
+  left_join(us_latlong_pop2019, by="state_name") %>% 
+  select(date, state_name, state_abb, everything()) %>% 
+  
+  mutate(population = population - total_deaths) %>% 
+  mutate(
+    tests_per_100k = round(100000*daily_tests/population,3),
+    cases_per_100k = round(100000*daily_cases/population,3),
+    deaths_per_100k = round(100000*daily_deaths/population,3)
+  ) %>% 
+  mutate(
+    popup = str_c(str_c("<b>",state_name,"</b>", sep=""), 
+                  str_c("Population: ", format(population, big.mark=","), sep= " "),
+                  str_c("Tests/100k: ", tests_per_100k, sep=" "),
+                  str_c("Cases/100k:", cases_per_100k, sep=" "),
+                  str_c("Deaths/100k: ", deaths_per_100k, sep=" "),
+                  sep="<br>")
+  ) %>% 
+  rename(state = state_name)
+```
+
+Inputs {.sidebar}
+---------------------------------------------------------------------
+
+##### Date:
+
+```{r}
+## Input Selection Tab
+fluidPage(
+  sliderInput(
+    inputId = "daterange_map", label = " ",
+    min = start_date_ct, max = end_date_ct,
+    value = end_date_ct 
+    ## - can't introduce animate until leafletProxy is fixed
+    # animate = TRUE 
+  )
+)
+
+# Reactive filtered data -- ALL
+filteredMapPoints <- reactive({
+  
+  filteredDate <- df_map %>% 
+    filter(date == input$daterange_map)
+  
+  filteredMapPoints <- sp::merge(
+    states_shape, 
+    filteredDate,
+    by.x = "STUSPS", 
+    by.y = "state_abb",
+    duplicateGeoms=TRUE
+  )
+})
+```
+
+***
+
+According to the [Rockefeller Foundation National Testing Action Plan](https://www.covidexitstrategy.org/), the U.S. needs to initially get to 3 million tests per week, and then 30 million tests per week.
+
+Having a *per 100k* metric is a way to standardize the values for daily testing, confirmed cases, and confirmed deaths per state. 
+
+For example, if the `Test/100k` is 200, it means that for every 100,000 people in that state, there are only 200 people that are getting tested for that day. 
+
+The data table on the right shows which states have the highest number of `Tests/100k`, `Cases/100k`, and `Deaths/100k`. 
+
+The overall goal here is to increase the number of testing and decrease the cases and deaths.
+
+For the average testing numbers per state, refer to the **50 States** tab to see the average testing per state.
+
+***
+
+Map Tabs
+------------------------------------
+
+### **MAP - DAILY TESTS**
+
+```{r}
+library(leaflet)
+
+renderLeaflet({
+  # for some reason, I have to do this to be able to call the dataframe
+  filteredMapPoints <- filteredMapPoints()
+  
+  # remove values from other US territories, converted to NA
+  filteredMapPoints <- subset(filteredMapPoints, !is.na(tests_per_100k))
+
+  colorpal_tests <- colorNumeric("Blues",
+                                 domain = filteredMapPoints$tests_per_100k)
+  
+  ## Plot the Map
+  filteredMapPoints %>% 
+    leaflet() %>% 
+    addProviderTiles("CartoDB.DarkMatterNoLabels") %>%
+    setView(-99, 40, zoom = 3) %>% 
+    
+    # Shapefile
+    addPolygons(
+      fillColor = ~colorpal_tests(tests_per_100k),
+      weight = 0.2, fillOpacity=0.8, smoothFactor=0.2, dashArray="2",
+      popup = ~popup,
+      highlight = highlightOptions(
+        color="blue", weight=0.5, dashArray="",
+        fillOpacity=0.8, bringToFront=TRUE)
+    ) %>%
+    
+    # Per capita legend
+    addLegend(pal = colorpal_tests,
+              values = filteredMapPoints$tests_per_100k,
+              position = "topright",
+              title = "Tests per 100k"
+    )
+})
+
+```
+
+
+### **MAP - DAILY CASES**
+
+```{r}
+renderLeaflet({
+  # for some reason, I have to do this to be able to call the dataframe
+  filteredMapPoints <- filteredMapPoints()
+  
+  # remove values from other US territories, converted to NA
+  filteredMapPoints <- subset(filteredMapPoints, !is.na(cases_per_100k))
+
+  colorpal_cases <- colorNumeric("Oranges",
+                                 domain = filteredMapPoints$cases_per_100k)
+  
+  ## Plot the Map
+  filteredMapPoints %>% 
+    leaflet() %>% 
+    addProviderTiles("CartoDB.DarkMatterNoLabels") %>%
+    setView(-99, 40, zoom = 3) %>% 
+    
+    # Shapefile
+    addPolygons(
+      fillColor = ~colorpal_cases(cases_per_100k),
+      weight = 0.2, fillOpacity=0.8, smoothFactor=0.2, dashArray="2",
+      popup = ~popup,
+      highlight = highlightOptions(
+        color="orange", weight=0.5, dashArray="",
+        fillOpacity=0.8, bringToFront=TRUE)
+    ) %>%
+    
+    # Per capita legend
+    addLegend(pal = colorpal_cases,
+              values = filteredMapPoints$cases_per_100k,
+              position = "topright",
+              title = "Cases per 100k"
+    )
+})
+```
+
+### **MAP - DAILY DEATHS**
+
+```{r}
+renderLeaflet({
+  # for some reason, I have to do this to be able to call the dataframe
+  filteredMapPoints <- filteredMapPoints()
+  
+  # remove values from other US territories, converted to NA
+  filteredMapPoints <- subset(filteredMapPoints, !is.na(deaths_per_100k))
+
+  colorpal_deaths <- colorNumeric("Reds",
+                                  domain = filteredMapPoints$deaths_per_100k)
+  
+  ## Plot the Map
+  filteredMapPoints %>% 
+    leaflet() %>% 
+    addProviderTiles("CartoDB.DarkMatterNoLabels") %>%
+    setView(-99, 40, zoom = 3) %>% 
+    
+    # Shapefile
+    addPolygons(
+      fillColor = ~colorpal_deaths(deaths_per_100k),
+      weight = 0.2, fillOpacity=0.8, smoothFactor=0.2, dashArray="2",
+      popup = ~popup,
+      highlight = highlightOptions(
+        color="red", weight=0.5, dashArray="",
+        fillOpacity=0.8, bringToFront=TRUE)
+    ) %>%
+    
+    # Per capita legend
+    addLegend(pal = colorpal_deaths,
+              values = filteredMapPoints$deaths_per_100k,
+              position = "topright",
+              title = "Deaths per 100k"
+    )
+})
+```
+
+
+Data Tables {data-width=200}
+--------------------------------------------
+
+### **TABLE - DAILY TESTS**
+```{r}
+# Data Table: Tests per 100k
+renderTable({
+  filteredMapPoints()@data %>%
+    select(State=state, `Tests/100k`=tests_per_100k) %>% 
+    arrange(desc(`Tests/100k`)) %>% 
+    filter(!is.na(`Tests/100k`))
+})
+```
+
+### **TABLE - DAILY CASES**
+```{r}
+# Data Table: Cases per 100k
+renderTable({
+  filteredMapPoints()@data %>%
+    select(State=state, `Cases/100k`=cases_per_100k) %>% 
+    arrange(desc(`Cases/100k`)) %>% 
+    filter(!is.na(`Cases/100k`))
+})
+```
+
+### **TABLE - DAILY DEATHS**
+```{r}
+# Data Table: Deaths per 100k
+renderTable({
+  filteredMapPoints()@data %>%
+    select(State=state, `Deaths/100k`=deaths_per_100k) %>% 
+    arrange(desc(`Deaths/100k`)) %>% 
+    filter(!is.na(`Deaths/100k`))
+})
+```
+
+About
+======================================================================
+
+Column 1
+--------------------------------------------
+
+#### COVID Tracking Project
+
+The [COVID Tracking Project](https://www.covidtracking.com) gathers testing information from different sources for all 50 states. This was used in determining the number of total tests, number of positive and negative cases, and many more information. See the link for data schema. 
+
+```{r}
+data.frame(
+  Column = c("state", "date", "positive", "negative", "total_tests", "deaths"),
+  Description = c("U.S. State", "Date of Reporting", 
+                  "Number of confirmed COVID-19 cases, as reported by different health data sources", 
+                  "Derived from the number of tests minus the number of positive cases",
+                  "Total number of tests", "Total number of deaths")
+) %>% 
+  kable() %>% 
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Google Community Mobility Reports
+
+The [Community Mobility Reports](https://www.google.com/covid19/mobility/) show movement trends by region, across different categories of places. For this particular visualization the data was subsetted only for the United States. Note that location accuracy and the understanding of categorized places varies from region to region, so Google does not recommend using the data to compare changes between countries, or between regions with different characteristics (e.g. rural versus urban areas). 
+
+In short, the graph is an indicator if Americans are going back to their normal routines earlier this year. If the blue line is closer to the baseline, 0%, it means that people in that area are doing similar activities like they did in January. 
+
+The data shows visitors to (or time spent in) categorized places change compared to the **baseline** days. A baseline day represents a *normal* value for that day of the week, in this case it is the median value from the 5-week period from January 3rd to February 6th 2020. Each location visit is classified into 6 categories:
+
+```{r}
+data.frame(
+  Location = c("Retail & Recreation",
+               "Grocery & Pharmacy",
+               "Parks",
+               "Transit Stations",
+               "Workplaces",
+               "Residential"),
+  Description = c("mobility trends for places like restaurants, cafes, shopping centers, theme parks, museums, libraries, and movie theaters",
+                "mobility trends for places like grocery markets, food warehouses, farmers markets, specialty food shops, drug stores, and pharmacies",
+                  "mobility trends for places like national parks, public beaches, marinas, dog parks, plazas, and public gardens",
+                  "mobility trends for places like public transport hubs such as subway, bus, and train stations",
+                  "mobility trends for places of work",
+                  "mobility trends for places of residence")
+) %>% 
+  kable() %>% 
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+***
+
+#### About the Author
+
+My name is **Jericho** and I created this Shiny app for educational and informational purposes only. 
+
+All datasets used and information provided are publicly available online. 
+
+Please check my other work at [**GitHub**](https://github.com/neooooo28) and connect with me on [**LinkedIn**](https://www.linkedin.com/in/jerichovillareal/)! 
+
+
+
