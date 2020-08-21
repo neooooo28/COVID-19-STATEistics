@@ -2,7 +2,7 @@
 
 This will serve as the repository for our final project for UCLA Stats 141: Statistical Consulting. The objective is to create a high-level analysis related to the current COVID-19 pandemic. 
 
-### [Shiny App Dashboard](https://neooooo28.shinyapps.io/covid_project_shiny/?_ga=2.182345445.315656279.1590652580-2143595324.1588794707) 
+### [Shiny App Dashboard](https://neooooo28.shinyapps.io/covid-19_stateistics/?_ga=2.257017739.1023846406.1597988683-2143595324.1588794707) 
 
 ## 1. Introduction
 
