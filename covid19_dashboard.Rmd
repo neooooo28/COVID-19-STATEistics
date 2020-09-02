@@ -57,6 +57,12 @@ library(flexdashboard)
 link_ct <- "https://api.covidtracking.com/v1/states/daily.csv" 
 dest_ct <- paste0(getwd(),"/00_data")
 filename_ct <- "CT_states_daily_4pm_et.csv"
+
+# if(!file.exists(file.path(dest_ct, filename_ct))) {
+#   download.file(link_ct, file.path(dest_ct, filename_ct))
+# }
+# --------------------------------------------------
+# Comment/Uncomment when updating COVID Tracking data
 # download.file(link_ct, file.path(dest_ct, filename_ct)) 
 
 ## 2. Google Community Mobility Report (gmcr)
@@ -64,11 +70,11 @@ link_gmcr <- "http://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv
 dest_gmcr <- paste0(getwd(),"/00_data")
 filename_gmcr <- "Global_Mobility_Report.csv" # this is the default name from Google
 
-if(!file.exists(file.path(dest_gmcr, filename_gmcr))) {
-  download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
-}
-
-# Comment/Uncomment when updating Google Data
+# if(!file.exists(file.path(dest_gmcr, filename_gmcr))) {
+#   download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
+# }
+# --------------------------------------------------
+# Comment/Uncomment when updating Google data
 # download.file(link_gmcr, file.path(dest_gmcr, filename_gmcr))
 ```
 
@@ -374,7 +380,7 @@ renderValueBox ({
 
 ```
 
-Row 4 {data-height=1000}
+Row 4
 --------------------
 
 ### **DAILY TESTS (vs 7-day MA)**
@@ -522,10 +528,43 @@ renderPlotly ({
 })
 ```
 
-Column 1
------------
+Trend
+======================================================================
+
+Column 
+------
 
 ```{r}
+## Overall Trend
+plot_static_newcases <- df_ct_clean %>% 
+  select(date, state, daily_cases, ave_7d_cases) %>% 
+  mutate(ave_7d_cases = round(ave_7d_cases,0)) %>% 
+  rename(Date = date, Ave7d= ave_7d_cases) %>% 
+  
+  ggplot(aes(x=Date, y=Ave7d)) +
+  geom_line(size=0.5, alpha=0.9, col="black") +
+  geom_area(alpha=0.1) +
+  theme_minimal() +
+  facet_wrap(~ state, scales="free_y", nrow=13) +
+  scale_x_date(date_labels="%b %d", date_breaks="3 weeks") +
+  theme(
+    panel.grid=element_blank(),
+    axis.title=element_blank(),
+    axis.text=element_blank(),
+    panel.spacing.x = unit(0.25,"lines"),
+    panel.spacing.y = unit(-0.15,"lines"),
+    # strip.text.x = element_text(size=8, vjust=-4),
+    plot.title=element_text(face="bold", hjust=0.5)
+  ) +
+  labs(title="Overall Trend of COVID+ Cases")
+  
+plotly::ggplotly(plot_static_newcases,
+                 height=1000, width=1180) %>%
+  config(displayModeBar = FALSE)
+```
+
+```{r}
+## 30-day Trend
 plot_static_newcases <- df_ct_clean %>% 
   select(date, state, daily_cases, ave_7d_cases) %>% 
   
@@ -556,7 +595,7 @@ plot_static_newcases <- df_ct_clean %>%
 #   # layout(hovermode='x unified') %>% 
 #   config(displayModeBar = FALSE)
 plotly::ggplotly(plot_static_newcases,
-                 height=1100, width=1280) %>%
+                 height=1000, width=1180) %>%
   config(displayModeBar = FALSE)
 ```
 
@@ -945,6 +984,8 @@ filteredMapPoints <- reactive({
 })
 ```
 
+**Last Update**: `r format(end_date_ct, "%b %d, %Y")`
+
 ***
 
 According to the [Rockefeller Foundation National Testing Action Plan](https://www.covidexitstrategy.org/), the U.S. needs to initially get to 3 million tests per week, and then 30 million tests per week.
@@ -1083,7 +1124,7 @@ renderLeaflet({
 ```
 
 
-Data Tables {data-width=200}
+Data Tables {data-width=300}
 --------------------------------------------
 
 ### **TABLE - DAILY TESTS**
